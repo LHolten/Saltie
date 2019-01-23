@@ -35,6 +35,9 @@ class PythonExample(BaseAgent):
         self.bot_fitness = [0] * self.pop
         self.fittest = None  # fittest object
         self.mut_rate = 2  # mutation rate
+        self.mut_multiplier = 0.8  # decreasing this will make the mutation rate increase and decrease faster
+        self.mut_power = 3  # increasing this will make the mutation rate decrease faster
+        self.mut_min = 0.01  # mutation rate will not go below this value
         self.distance_to_ball = [math.inf] * self.max_frames  # set high for easy minimum
         self.input_formatter = LeviInputFormatter(team, index)
         self.output_formatter = LeviOutputFormatter(index)
@@ -124,6 +127,7 @@ class PythonExample(BaseAgent):
     def next_generation(self):
         self.avg_best_fitness()
         self.calc_fittest()
+        self.adaptive_mut_rate()
 
         # PRINT GENERATION INFO
         print("")
@@ -150,7 +154,14 @@ class PythonExample(BaseAgent):
             if self.bot_fitness[i] < temp:
                 temp = self.bot_fitness[i]
                 self.fittest = i
-        return self.fittest
+
+    def adaptive_mut_rate(self):
+        if self.fittest < self.pop - self.num_best:
+            # new better bot!
+            self.mut_rate /= self.mut_multiplier
+        else:
+            # no new best bot :(
+            self.mut_rate = self.mut_min + (self.mut_rate - self.mut_min) * self.mut_multiplier**self.mut_power
 
     def reset(self):
         pos = self.ball_set[self.attempt][0]
@@ -159,10 +170,10 @@ class PythonExample(BaseAgent):
         car_state = CarState(jumped=False, double_jumped=False, boost_amount=33,
                              physics=Physics(rotation=Rotator(45, 8, 0), velocity=Vector3(0, 0, 0),
                                              angular_velocity=Vector3(0, 0, 0), location=Vector3(0.0, -4608, 500)))
-        game_info_state = GameInfoState(game_speed=1)
+        game_info_state = GameInfoState(game_speed=1.5)
         game_state = GameState(ball=ball_state, cars={self.index: car_state}, game_info=game_info_state)
         self.set_game_state(game_state)
-        time.sleep(0.1)
+        time.sleep(0.02)
 
     def selection(self):
         # COPY FITTEST WEIGHTS TO ALL GENOMES
@@ -172,11 +183,10 @@ class PythonExample(BaseAgent):
 
     def mutate(self):
         # MUTATE FIRST GENOMES
-        self.mut_rate = self.bot_fitness[self.fittest] / 10000
         for i, bot in enumerate(self.bot_list[:-self.num_best]):
             new_genes = self.Model()
             for param, param_new in zip(bot.parameters(), new_genes.parameters()):
-                mask = self.torch.rand(param.data.size()) < self.mut_rate / (i + 1)
+                mask = self.torch.rand(param.data.size()) < self.mut_rate
                 param.data[mask] = param_new.data[mask]
 
 
