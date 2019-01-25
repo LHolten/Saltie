@@ -32,7 +32,7 @@ class PythonExample(BaseAgent):
         self.bot_list = [self.Model() for _ in range(self.pop)]  # list of Individual() objects
         self.bot_fitness = [0] * self.pop
         self.parent = [0, 1]  # fittest object
-        self.mut_rate = 2  # mutation rate
+        self.mut_rate = 1  # mutation rate
         self.mut_multiplier = 0.8  # decreasing this will make the mutation rate increase and decrease faster
         self.mut_power = 3  # increasing this will make the mutation rate decrease faster
         self.mut_min = 0.01  # mutation rate will not go below this value
@@ -183,7 +183,7 @@ class PythonExample(BaseAgent):
             for param, param_parent1, param_parent2 in zip(bot.parameters(),
                                                            self.bot_list[0].parameters(),
                                                            self.bot_list[1].parameters()):
-                mask = self.torch.rand(param.data.size()) < self.mut_rate
+                mask = self.torch.rand(param.data.size()) < 0.5 + 5 * self.mut_rate
                 param.data[mask] = param_parent1.data[mask].clone()
                 param.data[~mask] = param_parent2.data[~mask].clone()
 
