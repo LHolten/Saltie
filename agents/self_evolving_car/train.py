@@ -61,14 +61,15 @@ class PythonExample(BaseAgent):
         draw_debug(self.renderer, action_display)
 
         # STOP EVOLVING WHEN THE BALL IS TOUCHED
-        #if packet.game_ball.latest_touch.player_name == "Self-Evolving-Car":
+        # if packet.game_ball.latest_touch.player_name == "Self-Evolving-Car":
         #  self.mut_rate = 0
 
         # GAME STATE
         car_state = CarState(boost_amount=100)
         velocity = self.ball_set[self.attempt][1]
         ball_state = BallState(
-            Physics(angular_velocity=Vector3(0, 0, 0), velocity=Vector3(velocity[0], velocity[1], velocity[2]), location=Vector3(z=1000)))
+            Physics(angular_velocity=Vector3(0, 0, 0), velocity=Vector3(velocity[0], velocity[1], velocity[2]),
+                    location=Vector3(z=1000)))
         game_state = GameState(ball=ball_state, cars={self.index: car_state})
         self.set_game_state(game_state)
 
@@ -78,9 +79,11 @@ class PythonExample(BaseAgent):
         self.controller_state = self.output_formatter.format_model_output(outputs, [packet])[0]
 
         # KILL
-        stop_attempt = (my_car.physics.location.z < 100 or my_car.physics.location.z > 1950 or
+        stop_attempt = self.frame > 50 and \
+                       (my_car.physics.location.z < 100 or my_car.physics.location.z > 1950 or
                         my_car.physics.location.x < -4000 or my_car.physics.location.x > 4000 or
-                        my_car.physics.location.y > 5000 or my_car.physics.location.y < -5000) and self.frame > 50
+                        my_car.physics.location.y > 5000 or my_car.physics.location.y < -5000 or
+                        self.distance_to_ball[self.frame] > self.distance_to_ball[self.frame - 1])
 
         # LOOPS
         self.frame += 1
@@ -156,12 +159,12 @@ class PythonExample(BaseAgent):
                 self.parent[1], self.parent[0] = self.parent[0], self.parent[1]
 
     def adaptive_mut_rate(self):
-        if max(self.parent) >= 2:
+        if min(self.parent) >= 2:
             # new better bot!
             self.mut_rate /= self.mut_multiplier
         else:
             # no new best bot :(
-            self.mut_rate = self.mut_min + (self.mut_rate - self.mut_min) * self.mut_multiplier**self.mut_power
+            self.mut_rate = self.mut_rate * self.mut_multiplier ** self.mut_power
 
     def reset(self):
         pos = self.ball_set[self.attempt][0]
@@ -177,9 +180,9 @@ class PythonExample(BaseAgent):
 
     def selection(self):
         # COPY FITTEST WEIGHTS TO FIRST TWO BOTS
-        for bot, parent_index in zip(self.bot_list, self.parent):
-            state_dict = self.bot_list[parent_index].state_dict()
-            bot.load_state_dict(state_dict)
+        fittest_dicts = [self.bot_list[parent_index].state_dict() for parent_index in self.parent]
+        for index in range(2):
+            self.bot_list[index].load_state_dict(fittest_dicts[index])
 
         # CROSSOVER TO CREATE THE OTHER BOTS
         for bot in self.bot_list[2:]:
@@ -187,7 +190,7 @@ class PythonExample(BaseAgent):
                                                            self.bot_list[0].parameters(),
                                                            self.bot_list[1].parameters()):
                 mask = self.torch.rand(param.data.size()) * (1 - min(self.mut_rate * 10, 1))
-                param.data = param_parent1.data * (1 - mask) + param_parent2.data * mask
+                param.data = (param_parent1.data * (1 - mask) + param_parent2.data * mask).clone()
 
     def mutate(self):
         # MUTATE NEW GENOMES
@@ -195,7 +198,7 @@ class PythonExample(BaseAgent):
             new_genes = self.Model()
             for param, param_new in zip(bot.parameters(), new_genes.parameters()):
                 mask = self.torch.rand(param.data.size()) * min(self.mut_rate, 1)
-                param.data = param.data * (1 - mask) + param_new.data * mask
+                param.data = (param.data * (1 - mask) + param_new.data * mask).clone()
 
 
 def draw_debug(renderer, action_display):
