@@ -22,7 +22,6 @@ class PythonExample(BaseAgent):
         self.frame = 0  # frame counter for timed reset
         self.brain = 0  # bot counter for generation reset
         self.pop = 10  # population for bot looping
-        self.num_best = 2
         self.gen = 0
         self.min_distance_to_ball = []
         self.ball_set = ((0, 1000, 0), (0, 0, 0)), ((1000, 0, 1000), (0, 0, 0)), \
@@ -31,9 +30,8 @@ class PythonExample(BaseAgent):
         self.attempt = 0
         self.max_frames = 5000
         self.bot_list = [self.Model() for _ in range(self.pop)]  # list of Individual() objects
-        self.bot_list[-self.num_best:] = [self.Model()] * self.num_best  # make sure last bots are the same
         self.bot_fitness = [0] * self.pop
-        self.fittest = None  # fittest object
+        self.parent = [0, 1]  # fittest object
         self.mut_rate = 2  # mutation rate
         self.mut_multiplier = 0.8  # decreasing this will make the mutation rate increase and decrease faster
         self.mut_power = 3  # increasing this will make the mutation rate decrease faster
@@ -125,7 +123,6 @@ class PythonExample(BaseAgent):
         self.min_distance_to_ball = []
 
     def next_generation(self):
-        self.avg_best_fitness()
         self.calc_fittest()
         self.adaptive_mut_rate()
 
@@ -133,8 +130,8 @@ class PythonExample(BaseAgent):
         print("")
         print("     GEN = " + str(self.gen + 1))
         print("-------------------------")
-        print("FITTEST = BOT " + str(self.fittest + 1))
-        print("------FITNESS = " + str(self.bot_fitness[self.fittest]))
+        print("FITTEST = BOT " + str(self.parent[0] + 1))
+        print("------FITNESS = " + str(self.bot_fitness[self.parent[0]]))
         # print("------WEIGHTS = " + str(self.bot_list[self.fittest]))
         for i in range(len(self.bot_list)):
             print("FITNESS OF BOT " + str(i + 1) + " = " + str(self.bot_fitness[i]))
@@ -144,19 +141,19 @@ class PythonExample(BaseAgent):
         self.selection()
         self.mutate()
 
-    def avg_best_fitness(self):
-        # CALCULATE AVG FITNESS OF 5 FITTEST (IDENTICAL) GENOMES
-        self.bot_fitness[-self.num_best:] = [sum(self.bot_fitness[-self.num_best:]) / self.num_best] * self.num_best
-
     def calc_fittest(self):
-        temp = math.inf
+        temp = [math.inf] * 2
         for i in range(len(self.bot_list)):
-            if self.bot_fitness[i] < temp:
-                temp = self.bot_fitness[i]
-                self.fittest = i
+            if self.bot_fitness[i] < temp[1]:
+                temp[1] = self.bot_fitness[i]
+                self.parent[1] = i
+            if temp[1] < temp[0]:
+                # swap spots
+                temp[1], temp[0] = temp[0], temp[1]
+                self.parent[1], self.parent[0] = self.parent[0], self.parent[1]
 
     def adaptive_mut_rate(self):
-        if self.fittest < self.pop - self.num_best:
+        if max(self.parent) >= 2:
             # new better bot!
             self.mut_rate /= self.mut_multiplier
         else:
@@ -176,18 +173,27 @@ class PythonExample(BaseAgent):
         time.sleep(0.02)
 
     def selection(self):
-        # COPY FITTEST WEIGHTS TO ALL GENOMES
-        state_dict = self.bot_list[self.fittest].state_dict()
-        for bot in self.bot_list:
+        # COPY FITTEST WEIGHTS TO FIRST TWO BOTS
+        for bot, parent_index in zip(self.bot_list, self.parent):
+            state_dict = self.bot_list[parent_index].state_dict()
             bot.load_state_dict(state_dict)
 
+        # CROSSOVER TO CREATE THE OTHER BOTS
+        for bot in self.bot_list[2:]:
+            for param, param_parent1, param_parent2 in zip(bot.parameters(),
+                                                           self.bot_list[0].parameters(),
+                                                           self.bot_list[1].parameters()):
+                mask = self.torch.rand(param.data.size()) < self.mut_rate
+                param.data[mask] = param_parent1.data[mask].clone()
+                param.data[~mask] = param_parent2.data[~mask].clone()
+
     def mutate(self):
-        # MUTATE FIRST GENOMES
-        for i, bot in enumerate(self.bot_list[:-self.num_best]):
+        # MUTATE NEW GENOMES
+        for bot in self.bot_list[2:]:
             new_genes = self.Model()
             for param, param_new in zip(bot.parameters(), new_genes.parameters()):
                 mask = self.torch.rand(param.data.size()) < self.mut_rate
-                param.data[mask] = param_new.data[mask]
+                param.data[mask] = param_new.data[mask]  # no need to clone because new_genes is not reused
 
 
 def draw_debug(renderer, action_display):
