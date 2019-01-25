@@ -186,17 +186,16 @@ class PythonExample(BaseAgent):
             for param, param_parent1, param_parent2 in zip(bot.parameters(),
                                                            self.bot_list[0].parameters(),
                                                            self.bot_list[1].parameters()):
-                mask = self.torch.rand(param.data.size()) < 0.5 + 5 * self.mut_rate
-                param.data[mask] = param_parent1.data[mask].clone()
-                param.data[~mask] = param_parent2.data[~mask].clone()
+                mask = self.torch.rand(param.data.size()) * (1 - min(self.mut_rate * 10, 1))
+                param.data = param_parent1.data * (1 - mask) + param_parent2.data * mask
 
     def mutate(self):
         # MUTATE NEW GENOMES
         for bot in self.bot_list[2:]:
             new_genes = self.Model()
             for param, param_new in zip(bot.parameters(), new_genes.parameters()):
-                mask = self.torch.rand(param.data.size()) < self.mut_rate
-                param.data[mask] = param_new.data[mask]  # no need to clone because new_genes is not reused
+                mask = self.torch.rand(param.data.size()) * min(self.mut_rate, 1)
+                param.data = param.data * (1 - mask) + param_new.data * mask
 
 
 def draw_debug(renderer, action_display):
