@@ -30,7 +30,7 @@ class PythonExample(BaseAgent):
         self.attempt = 0
         self.max_frames = 5000
         self.bot_list = [self.Model() for _ in range(self.pop)]  # list of Individual() objects
-        self.bot_fitness = [0] * self.pop
+        self.bot_fitness = [math.inf] * self.pop
         self.parent = [0, 1]  # fittest object
         self.mut_rate = 1  # mutation rate
         self.mut_multiplier = 0.8  # decreasing this will make the mutation rate increase and decrease faster
@@ -78,29 +78,34 @@ class PythonExample(BaseAgent):
         self.controller_state = self.output_formatter.format_model_output(outputs, [packet])[0]
 
         # KILL
-        if (my_car.physics.location.z < 100 or my_car.physics.location.z > 1950 or my_car.physics.location.x < -4000 or
-            my_car.physics.location.x > 4000 or my_car.physics.location.y > 5000
-                or my_car.physics.location.y < -5000) and self.frame > 50:
-            self.frame = self.max_frames
+        stop_attempt = (my_car.physics.location.z < 100 or my_car.physics.location.z > 1950 or
+                        my_car.physics.location.x < -4000 or my_car.physics.location.x > 4000 or
+                        my_car.physics.location.y > 5000 or my_car.physics.location.y < -5000) and self.frame > 50
 
         # LOOPS
         self.frame += 1
-        if self.frame >= self.max_frames:
+        if self.frame >= self.max_frames or stop_attempt:
             self.frame = 0
 
             self.calc_min_fitness()
+            self.calc_fitness()
+            self.calc_fittest()
+
+            stop_brain = max(self.parent) != self.brain and self.brain > 1
 
             self.attempt += 1
-            if self.attempt >= 5:
+            if self.attempt >= 5 or stop_brain:
                 self.attempt = 0
 
-                self.calc_fitness()
+                self.min_distance_to_ball = []
 
                 self.brain += 1  # change bot every reset
                 if self.brain >= self.pop:
                     self.brain = 0  # reset bots after all have gone
 
                     self.next_generation()
+
+                    self.bot_fitness = [math.inf] * self.pop
 
                     self.gen += 1
 
@@ -117,13 +122,11 @@ class PythonExample(BaseAgent):
     def calc_fitness(self):
         # CALCULATE AVERAGE OF MINIMUM DISTANCE TO BALL FOR EACH GENOME
         sum1 = sum(self.min_distance_to_ball)
-        sum1 /= len(self.min_distance_to_ball)
+        # sum1 /= len(self.min_distance_to_ball)
 
         self.bot_fitness[self.brain] = sum1
-        self.min_distance_to_ball = []
 
     def next_generation(self):
-        self.calc_fittest()
         self.adaptive_mut_rate()
 
         # PRINT GENERATION INFO
