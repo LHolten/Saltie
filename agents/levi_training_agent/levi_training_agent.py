@@ -28,6 +28,12 @@ from rlbot.matchcomms.common_uses.reply import reply_to
 from queue import Empty
 import pickle
 
+from rlutilities.linear_algebra import vec3, dot, normalize, norm, mat3, angle_between
+from rlutilities.simulation import Car, Game, Curve, ControlPoint, Ball, Input
+from rlutilities.mechanics import AerialTurn
+
+import json
+
 path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, path)  # this is for first process imports
 
@@ -47,6 +53,12 @@ class LeviAgent(BaseAgent):
         self.input_formatter = None
         self.output_formatter = None
 
+        self.game = Game(index, team)
+        self.action = None
+        self.target = None
+        self.target_loc = None
+        self.msg = None
+
     def initialize_agent(self):
         self.input_formatter = self.create_input_formatter()
         self.output_formatter = self.create_output_formatter()
@@ -58,6 +70,20 @@ class LeviAgent(BaseAgent):
             return self.empty_controller
         if packet.game_cars[self.index].is_demolished:
             return self.empty_controller
+        if self.action:
+            self.game.read_game_information(packet,
+                                            self.get_rigid_body_tick(),
+                                            self.get_field_info())
+            if angle_between(self.action.target, self.game.my_car.rotation) < 0.01 and \
+                    norm(self.game.my_car.location - self.target_loc) < 8.5 and \
+                    self.game.my_car.location[2] < 17.5:
+                reply_to(self.matchcomms, self.msg)
+                self.action = None
+            else:
+                # print(norm(self.game.my_car.location - self.target_loc))
+                # self.game.my_car.controls = SimpleControllerState()
+                self.action.step(self.game.time_delta)
+                return self.action.controls
         if not self.model:
             return self.empty_controller
 
@@ -95,9 +121,16 @@ class LeviAgent(BaseAgent):
             except Empty:
                 break
 
-            if handle_set_attributes_message(msg, self, allowed_keys=['model_hex']):
-                reply_to(self.matchcomms, msg)  # Let the sender know we've set the attribute.
-                self.model = pickle.loads(bytes.fromhex(self.model_hex))
+            if handle_set_attributes_message(msg, self, allowed_keys=['model_hex', 'target', 'target_loc']):
+                if self.target:
+                    self.action = AerialTurn(self.game.my_car)
+                    self.action.target = mat3(*json.loads(self.target))
+                    self.target_loc = vec3(*json.loads(self.target_loc))
+                    self.msg = msg
+                    self.target = None
+                else:
+                    self.model = pickle.loads(bytes.fromhex(self.model_hex))
+                    reply_to(self.matchcomms, msg)  # Let the sender know we've set the attribute.
             else:
                 # Ignore messages that are not for us.
                 self.logger.debug(f'Unhandled message: {msg}')
